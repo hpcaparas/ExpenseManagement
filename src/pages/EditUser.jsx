@@ -13,6 +13,7 @@ const EditUser = () => {
         roleIds: [],
         departmentIds: [],
         companyId: "",
+        orgRoleIds: [],
     });
 
     const [roles, setRoles] = useState([]);
@@ -20,6 +21,7 @@ const EditUser = () => {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const [showPopup, setShowPopup] = useState(false);
+    const [orgRoles, setOrgRoles] = useState([]);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -35,8 +37,12 @@ const EditUser = () => {
             ]);
             setRoles(rolesRes.data);
             setDepartments(deptRes.data);
+
+            const companyName = JSON.parse(localStorage.getItem("user")).company.name;
+            const orgRoleRes = await ApiClient.get(`/org-roles?companyName=${companyName}`);
+            setOrgRoles(orgRoleRes.data);
         } catch (err) {
-            setError("Failed to load roles or departments.");
+            setError("Failed to load roles, departments , or org roles.");
         }
     };
 
@@ -52,6 +58,7 @@ const EditUser = () => {
                 email: userData.email || "",
                 password: "", // ✅ Keep password empty unless updating
                 roleIds: userData.roles ? userData.roles.map((role) => role.id) : [],
+                orgRoleIds: userData.orgRoles ? userData.orgRoles.map((r) => r.id) : [],
                 departmentIds: userData.departments ? userData.departments.map((dept) => dept.id) : [],
                 companyId: userData.company ? userData.company.id : null, // ✅ Safely handle missing `company`
             }));
@@ -165,7 +172,23 @@ const EditUser = () => {
                             </option>
                         ))}
                     </select>
+                </div>
 
+                <div className="mb-4">
+                    <label className="block text-sm font-medium">Org Roles</label>
+                    <select
+                        name="orgRoleIds"
+                        multiple
+                        value={formData.orgRoleIds}
+                        onChange={(e) => handleMultiSelect(e, "orgRoleIds")}
+                        className="w-full border p-2 rounded h-32"
+                    >
+                        {orgRoles.map((role) => (
+                        <option key={role.id} value={role.id}>
+                            {role.orgRoleDescription} {role.amountLimit ? `— Limit: ${role.amountLimit}` : ""}
+                        </option>
+                        ))}
+                    </select>
                 </div>
 
                 <div className="mb-4">

@@ -23,6 +23,7 @@ const UserManagement = () => {
     try {
       const response = await ApiClient.get("/users");
       setUsers(response.data);
+      console.log(users);
     } catch (error) {
       console.error("Failed to fetch users:", error);
       setUsers([]);
@@ -177,6 +178,7 @@ const UserManagement = () => {
               <th className="p-2 border-b text-left" onClick={() => handleSort("email")}>Email</th>
               <th className="p-2 border-b text-left" onClick={() => handleSort("departments")}>Departments</th>
               <th className="p-2 border-b text-left" onClick={() => handleSort("roles")}>Roles</th>
+              <th className="p-2 border-b text-left" onClick={() => handleSort("orgRoles")}>Org Roles</th>
               <th className="p-2 border-b text-left" onClick={() => handleSort("status")}>Status</th>
               <th className="p-2 border-b text-left">Actions</th>
             </tr>
@@ -189,6 +191,7 @@ const UserManagement = () => {
                 <td className="p-2 border-b">{user.email}</td>
                 <td className="p-2 border-b">{user.departments.map((d) => d.name).join(", ") || "No Departments"}</td>
                 <td className="p-2 border-b">{user.roles.map((r) => r.name).join(", ") || "No Roles"}</td>
+                <td className="p-2 border-b">{user.orgRoles.map((r) => r.orgRoleCode).join(", ") || "No Org Roles"}</td>
                 <td className="p-2 border-b">{user.status}</td>
                 <td className="p-2 border-b">
                   <Link to={`/users/edit/${user.id}`} className="text-blue-500 mr-2">Edit</Link>
@@ -216,6 +219,7 @@ const UserManagement = () => {
             <p><strong>Email:</strong> {user.email}</p>
             <p><strong>Departments:</strong> {user.departments.map((d) => d.name).join(", ") || "No Departments"}</p>
             <p><strong>Roles:</strong> {user.roles.map((r) => r.name).join(", ") || "No Roles"}</p>
+            <td className="p-2 border-b">{user.orgRoles.map((r) => r.name).join(", ") || "No Org Roles"}</td>
             <p><strong>Status:</strong> {user.status}</p>
             <div className="flex gap-2 mt-2">
               <Link to={`/users/edit/${user.id}`} className="bg-blue-500 text-white px-3 py-1 rounded">

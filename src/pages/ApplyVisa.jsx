@@ -20,28 +20,21 @@ const ApplyVisa = () => {
 
   const [departments, setDepartments] = useState([]);
   const [types, setTypes] = useState([]);
-  const [errorMessage, setErrorMessage] = useState(""); // ✅ Error modal state
+  const [approverSelections, setApproverSelections] = useState({});
+  const [workflowSteps, setWorkflowSteps] = useState([]);
+
+  const [errorMessage, setErrorMessage] = useState("");
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [maxUploadSize, setMaxUploadSize] = useState(5 * 1024 * 1024); // Default 5MB
-  const navigate = useNavigate();
+  const [maxUploadSize, setMaxUploadSize] = useState(5 * 1024 * 1024);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pendingRequest, setPendingRequest] = useState(null);
   const [compressedFile, setCompressedFile] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchMetadata();
-    fetchConfig();
   }, []);
-
-  const fetchConfig = async () => {
-    try {
-      const response = await ApiClient.get("/visa/config"); // ✅ Fetch max upload size
-      setMaxUploadSize(response.data.maxUploadSize);
-    } catch (err) {
-      console.error("Failed to load config, using default max size.");
-    }
-  };
 
   const fetchMetadata = async () => {
     try {
@@ -49,19 +42,51 @@ const ApplyVisa = () => {
       setFormData((prev) => ({ ...prev, userId: user.id }));
 
       const [deptRes, typeRes] = await Promise.all([
-        ApiClient.get(`/departments/assigned?userId=${user.id}`),
+        ApiClient.get(`/departments/company?companyName=${user.company.name}`),
         ApiClient.get("/types"),
       ]);
 
       setDepartments(deptRes.data);
       setTypes(typeRes.data);
-
-      if (deptRes.data.length > 0) {
-        setFormData((prev) => ({ ...prev, departmentId: deptRes.data[0].id }));
-      }
     } catch (err) {
       setErrorMessage("Failed to load metadata.");
     }
+  };
+
+  const handleDepartmentChange = async (e) => {
+    const departmentId = e.target.value;
+    setFormData({ ...formData, departmentId });
+    setWorkflowSteps([]);
+    setApproverSelections({});
+
+    if (!departmentId) return;
+
+    try {
+      const response = await ApiClient.get(`/departments/${departmentId}/workflow?approvalType=EXPENSE_APPROVAL`);
+      const workflow = response.data;
+
+      const updatedApproverSelections = {};
+      for (let step of workflow) {
+        if (step.users.length === 0) {
+          setErrorMessage(`No approver found for org role ${step.orgRoleCode}. Please contact your administrator.`);
+          return;
+        } else if (step.users.length === 1) {
+          updatedApproverSelections[step.sequenceOrder] = step.users[0].id;
+        }
+      }
+
+      setWorkflowSteps(workflow);
+      setApproverSelections(updatedApproverSelections);
+    } catch (err) {
+      setErrorMessage(err.response?.data || "Failed to load approval workflow.");
+    }
+  };
+
+  const handleApproverChange = (stepOrder, userId) => {
+    setApproverSelections((prev) => ({
+      ...prev,
+      [stepOrder]: userId,
+    }));
   };
 
   const handleChange = (e) => {
@@ -70,65 +95,81 @@ const ApplyVisa = () => {
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
+    if (!file) return;
 
-    if (file) {
-      try {
-        // ✅ Compress image before storing
-        const options = {
-          maxSizeMB: 1, // ✅ Compress image to max 1MB
-          maxWidthOrHeight: 1024, // ✅ Resize image to max 1024x1024 pixels
-          useWebWorker: true, // ✅ Use Web Workers for better performance
-        };
+    try {
+      const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1024,
+        useWebWorker: true,
+      };
 
-        const compressedBlob = await imageCompression(file, options);
-        console.log("Original file size:", (file.size / 1024 / 1024).toFixed(2), "MB");
-        console.log("Compressed file size:", (compressedBlob.size / 1024 / 1024).toFixed(2), "MB");
+      const compressedBlob = await imageCompression(file, options);
+      const fileName = `receipt_${Date.now()}.jpg`;
+      const compressedFile = new File([compressedBlob], fileName, { type: "image/jpeg" });
 
-        // ✅ Convert Blob to .jpg File
-        const fileName = `receipt_${Date.now()}.jpg`; // Ensure a proper .jpg extension
-        const compressedFile = new File([compressedBlob], fileName, { type: "image/jpeg" });
-
-        setCompressedFile(compressedFile); // ✅ Store the compressed .jpg file
-        setPreview(URL.createObjectURL(compressedFile)); // ✅ Preview compressed image
-      } catch (error) {
-        console.error("Image compression failed:", error);
-        alert("Failed to compress image. Please try again.");
-      }
+      setCompressedFile(compressedFile);
+      setPreview(URL.createObjectURL(compressedFile));
+    } catch (error) {
+      console.error("Image compression failed:", error);
+      alert("Failed to compress image. Please try again.");
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setErrorMessage("");
-
-    // ✅ Store the request data and show confirmation modal
     setPendingRequest({ ...formData, image: compressedFile });
     setShowConfirmation(true);
   };
 
   const confirmSubmit = async () => {
     if (!pendingRequest) return;
-
+  
     setShowConfirmation(false);
     setLoading(true);
-
+  
+    const user = JSON.parse(localStorage.getItem("user"));
+    const userOrgRoles = user.orgRoles || []; // [{id, orgRoleCode, orgRoleDescription, amountLimit, ...}]
+  
+    // Find the user's main org role and amount limit
+    // (If multiple org roles, define your rule: pick highest, lowest, or show a selection to the user)
+    const userRole = userOrgRoles[0]; // Simplified; adjust as needed
+    const userAmountLimit = userRole?.amountLimit ? Number(userRole.amountLimit) : 0;
+  
+    // Prepare new approverSelections (skip if user's amount limit < approver's amount limit, except Finance)
+    let newApproverSelections = { ...approverSelections };
+  
+    workflowSteps.forEach((step) => {
+      const isFinance = step.orgRoleDescription.toLowerCase().includes("finance");
+      const approverRoleAmountLimit = Number(step.amountLimit);
+  
+      if (!isFinance && userAmountLimit < approverRoleAmountLimit) {
+        // Skip this approver step (don't include in selections)
+        delete newApproverSelections[step.sequenceOrder];
+      }
+      // If Finance, always keep
+    });
+  
+    // Now continue with your normal FormData logic
     const formDataObj = new FormData();
     Object.keys(pendingRequest).forEach((key) => {
       formDataObj.append(key, pendingRequest[key]);
     });
-
+    formDataObj.append("approverSelections", JSON.stringify(newApproverSelections));
+  
     try {
       await ApiClient.post("/visa", formDataObj, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-
-      navigate("/visa/visas"); // ✅ Redirect after success
+      navigate("/visa/visas");
     } catch (err) {
-      setErrorMessage(err.response?.data || "Failed to apply for visa.");
+      setErrorMessage(err.response?.data || "Failed to apply for Expense.");
     } finally {
       setLoading(false);
     }
   };
+  
 
   const defaultOptions = {
     loop: true,
@@ -141,12 +182,11 @@ const ApplyVisa = () => {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Apply for Visa</h1>
+      <h1 className="text-2xl font-bold mb-4">Apply for Expense</h1>
 
       {errorMessage && <ErrorModal message={errorMessage} onClose={() => setErrorMessage("")} />}
 
-       {/* 🔥 Full-screen Loading Overlay */}
-       {loading && (
+      {loading && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           <Lottie options={defaultOptions} height={200} width={200} />
         </div>
@@ -165,13 +205,38 @@ const ApplyVisa = () => {
 
         <div className="mb-4">
           <label className="block text-sm font-medium">Department</label>
-          <select name="departmentId" value={formData.departmentId} onChange={handleChange} required className="w-full border p-2 rounded">
+          <select name="departmentId" value={formData.departmentId} onChange={handleDepartmentChange} required className="w-full border p-2 rounded">
             <option value="">Select Department</option>
             {departments.map((dept) => (
               <option key={dept.id} value={dept.id}>{dept.name}</option>
             ))}
           </select>
         </div>
+
+        {/* Approver Selections */}
+        {workflowSteps.map((step) => (
+          step.users.length > 1 && (
+            <div key={step.sequenceOrder} className="mb-4">
+              <label className="block text-sm font-medium">
+                Select Approver for Step {step.sequenceOrder} ({step.orgRoleDescription}) -{" "}
+                <span className="text-yellow-600 font-semibold">
+                  You are seeing this because multiple users have the same org role in the Department/Company.
+                </span>
+              </label>
+              <select
+                value={approverSelections[step.sequenceOrder] || ""}
+                onChange={(e) => handleApproverChange(step.sequenceOrder, e.target.value)}
+                className="w-full border p-2 rounded"
+                required
+              >
+                <option value="">Select Approver</option>
+                {step.users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.name}</option>
+                ))}
+              </select>
+            </div>
+          )
+        ))}
 
         <div className="mb-4">
           <label className="block text-sm font-medium">Type</label>
@@ -201,6 +266,7 @@ const ApplyVisa = () => {
         <div className="mb-4">
           <label className="block text-sm font-medium">Upload Receipt</label>
           <input type="file" accept="image/*" onChange={handleFileChange} className="w-full border p-2 rounded" />
+          <p className="text-xs text-gray-500 mt-1">Image should contain tax, date, name of vendor, and other necessary details.</p>
         </div>
 
         {preview && <img src={preview} alt="Preview" className="mt-2 rounded shadow-md w-full h-auto" />}
@@ -210,12 +276,11 @@ const ApplyVisa = () => {
         </button>
       </form>
 
-      {/* ✅ Confirmation Popup */}
       {showConfirmation && (
         <ConfirmationPopup
-          message="Are you sure you want to apply for this visa?"
-          onConfirm={confirmSubmit} // ✅ Proceed with API call
-          onCancel={() => setShowConfirmation(false)} // ❌ Cancel action
+          message="Are you sure you want to apply for this Expense?"
+          onConfirm={confirmSubmit}
+          onCancel={() => setShowConfirmation(false)}
         />
       )}
     </div>

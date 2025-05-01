@@ -11,7 +11,8 @@ const AddUser = () => {
         password: "",
         roleIds: [],
         departmentIds: [],
-        companyId: "", // ✅ Added companyId field
+        companyId: "", 
+        orgRoleIds: [],
     });
 
     const [roles, setRoles] = useState([]);
@@ -19,6 +20,7 @@ const AddUser = () => {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const [showPopup, setShowPopup] = useState(false); // ✅ State for confirmation popup
+    const [orgRoles, setOrgRoles] = useState([]);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -35,6 +37,10 @@ const AddUser = () => {
 
             setRoles(rolesRes.data);
             setDepartments(deptRes.data);
+
+            const companyName = JSON.parse(localStorage.getItem("user")).company.name;
+            const orgRoleRes = await ApiClient.get(`/org-roles?companyName=${companyName}`);
+            setOrgRoles(orgRoleRes.data);
         } catch (err) {
             setError("Failed to load roles or departments.");
         }
@@ -137,7 +143,7 @@ const AddUser = () => {
                 </div>
 
                 <div className="mb-4">
-                    <label className="block text-sm font-medium">Roles</label>
+                    <label className="block text-sm font-medium">User Roles</label>
                     <select
                         name="roleIds"
                         multiple
@@ -153,6 +159,27 @@ const AddUser = () => {
                         ))}
                     </select>
                 </div>
+
+                <div className="mb-4">
+                    <label className="block text-sm font-medium">Org Roles</label>
+                    <select
+                        multiple
+                        value={formData.orgRoleIds}
+                        onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, (option) => Number(option.value));
+                            setFormData((prev) => ({ ...prev, orgRoleIds: selected }));
+                        }}
+                        className="w-full border p-2 rounded"
+                        >
+                        {orgRoles.map((role) => (
+                            <option key={role.id} value={role.id}>
+                            {role.orgRoleCode} - {role.orgRoleDescription}
+                            </option>
+                        ))}
+                    </select>
+
+                </div>
+
 
                 <div className="mb-4">
                     <label className="block text-sm font-medium">Departments</label>

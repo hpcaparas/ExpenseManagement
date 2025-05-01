@@ -3,6 +3,7 @@ import ApiClient from "../utils/ApiClient";
 import ConfirmationPopup from "../components/ConfirmationPopup";
 import ErrorModal from "../components/ErrorModal";
 import ReceiptModal from "../components/ReceiptModal"; // ✅ Modal for receipt preview
+import config from "../config/config";
 
 const PendingApprovals = () => {
   const [approvals, setApprovals] = useState([]);
@@ -109,7 +110,7 @@ const PendingApprovals = () => {
                   <td className="p-2 border">
                     {approval.imageFilename ? (
                       <button
-                        onClick={() => setSelectedReceipt(`http://localhost:8080/uploads/${approval.imageFilename}`)}
+                        onClick={() => setSelectedReceipt(`${config.baseUrl}uploads/${approval.imageFilename}`)}
                         className="text-blue-500 hover:underline"
                       >
                         View Receipt
@@ -151,7 +152,7 @@ const PendingApprovals = () => {
               <strong>Receipt:</strong> 
               {approval.imageFilename ? (
                 <button
-                  onClick={() => setSelectedReceipt(`http://localhost:8080/uploads/${approval.imageFilename}`)}
+                  onClick={() => setSelectedReceipt(`${config.baseUrl}uploads/${approval.imageFilename}`)}
                   className="text-blue-500 hover:underline ml-2"
                 >
                   View Receipt

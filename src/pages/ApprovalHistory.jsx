@@ -27,13 +27,21 @@ const ApprovalHistory = () => {
   const getStatusColor = (status) => {
     switch (status) {
       case "APPROVED":
-        return "text-green-500";
-      case "DECLINED":
-        return "text-red-500";
+      case "FINANCE APPROVED":
+        return "text-green-600 font-bold";
+      case "REJECTED":
+      case "RETURNED":
+      case "RETURNED BY FINANCE":
+        return "text-yellow-600 font-bold";
+      case "PENDING":
+        return "text-gray-500";
+      case "PENDING FINANCE APPROVAL":
+        return "text-blue-600 font-bold";
       default:
         return "text-gray-500";
     }
   };
+  
 
   return (
     <div className="p-6">
@@ -50,7 +58,7 @@ const ApprovalHistory = () => {
               <th className="p-2 border">Department</th>
               <th className="p-2 border">Type</th>
               <th className="p-2 border">Price (With Tax)</th>
-              <th className="p-2 border">Status</th>
+              <th className="p-2 border">Action Made</th>
               <th className="p-2 border">Remarks</th>
               <th className="p-2 border">Receipt</th>
             </tr>

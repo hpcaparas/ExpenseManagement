@@ -1,56 +1,62 @@
 import React, { useState, useEffect } from "react";
 import ApiClient from "../utils/ApiClient";
 import { useNavigate } from "react-router-dom";
-import ConfirmationPopup from "../components/ConfirmationPopup"; // ✅ Import ConfirmationPopup
+import ConfirmationPopup from "../components/ConfirmationPopup";
+import ErrorModal from "../components/ErrorModal";
 
 const AddDepartment = () => {
   const [formData, setFormData] = useState({
     name: "",
     glCode: "",
-    companyName: "", // Auto-detected
+    companyName: "",
+    approvalType: "EXPENSE_APPROVAL",
     approvalSteps: [],
   });
 
-  const [roles, setRoles] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [orgRoles, setOrgRoles] = useState([]);
   const [error, setError] = useState("");
-  const [showConfirmation, setShowConfirmation] = useState(false); // ✅ Confirmation popup state
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showFinanceWarning, setShowFinanceWarning] = useState(false);
   const [pendingRequest, setPendingRequest] = useState(null);
   const navigate = useNavigate();
 
-  // Fetch roles and users on mount
   useEffect(() => {
-    fetchMetadata();
-
-    const storedUser = localStorage.getItem("user");
-  
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser);
-        if (user.company?.name) {
-          setFormData((prevData) => ({
-            ...prevData,
-            companyName: user.company.name, // ✅ Set companyName
-          }));
-        }
-      } catch (error) {
-        console.error("Error parsing user data:", error);
-      }
+    const user = JSON.parse(localStorage.getItem("user"));
+    if (user?.company?.name) {
+      setFormData((prev) => ({ ...prev, companyName: user.company.name }));
+      fetchOrgRoles(user.company.name);
     }
   }, []);
 
-  const fetchMetadata = async () => {
+  const fetchOrgRoles = async (companyName) => {
     try {
-      const [rolesRes, usersRes] = await Promise.all([
-        ApiClient.get("/roles"),
-        ApiClient.get("/users"),
-      ]);
-      setRoles(rolesRes.data);
-      setUsers(usersRes.data);
+      const response = await ApiClient.get(`/org-roles?companyName=${companyName}`);
+      const roles = response.data;
+      setOrgRoles(roles);
+  
+      const manager = roles.find(r => r.orgRoleDescription.toLowerCase() === "manager" && r.status === "ACTIVE");
+      const director = roles.find(r => r.orgRoleDescription.toLowerCase() === "director" && r.status === "ACTIVE");
+      const finance = roles.find(r => r.orgRoleDescription.toLowerCase() === "finance approver" && r.status === "ACTIVE");
+  
+      // ✅ Show modal if Finance is missing or deactivated
+      if (!finance) {
+        setShowFinanceWarning(true);
+        return;
+      }
+  
+      if (manager && director) {
+        setFormData((prev) => ({
+          ...prev,
+          approvalSteps: [
+            { orgRoleId: manager.id, scope: "DEPARTMENT", sequenceOrder: 1 },
+            { orgRoleId: director.id, scope: "COMPANY", sequenceOrder: 2 },
+          ],
+        }));
+      }
     } catch (err) {
-      setError("Failed to load roles or users.");
+      setError("Failed to load organization roles.");
     }
-  };
+  };  
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -62,100 +68,68 @@ const AddDepartment = () => {
       approvalSteps: [
         ...prevState.approvalSteps,
         {
-          approvalType: "",
-          roleId: null,
-          userId: null,
-          sequenceOrder: prevState.approvalSteps.length + 1, // ✅ Auto-assign sequenceOrder
+          orgRoleId: null,
+          scope: "DEPARTMENT",
+          sequenceOrder: prevState.approvalSteps.length + 1,
         },
       ],
     }));
   };
 
   const handleApprovalStepChange = (index, field, value) => {
+    if (field === "orgRoleId") {
+      const selectedRole = orgRoles.find(r => r.id.toString() === value);
+      if (selectedRole && selectedRole.orgRoleDescription.toLowerCase() === "finance approver") {
+        setError("Finance cannot be added to the approval workflow. It will be added automatically.");
+        return;
+      }
+    }
+
     setFormData((prevState) => {
       const updatedSteps = [...prevState.approvalSteps];
-
-      if (field === "roleId") {
-        updatedSteps[index] = { ...updatedSteps[index], roleId: value, userId: null };
-      } else if (field === "userId") {
-        updatedSteps[index] = { ...updatedSteps[index], userId: value, roleId: null };
-      } else {
-        updatedSteps[index][field] = value;
-      }
-
+      updatedSteps[index][field] = value;
       return { ...prevState, approvalSteps: updatedSteps };
     });
   };
 
   const removeApprovalStep = (index) => {
-    setFormData((prevState) => ({
-      ...prevState,
-      approvalSteps: prevState.approvalSteps
-        .filter((_, i) => i !== index)
-        .map((step, idx) => ({ ...step, sequenceOrder: idx + 1 })), // ✅ Reorder sequence
-    }));
+    const updated = formData.approvalSteps
+      .filter((_, i) => i !== index)
+      .map((step, i) => ({ ...step, sequenceOrder: i + 1 }));
+    setFormData({ ...formData, approvalSteps: updated });
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setError("");
-
-    // ✅ Store request data and show confirmation modal
     setPendingRequest(formData);
     setShowConfirmation(true);
   };
 
   const confirmSubmit = async () => {
-    if (!pendingRequest) return;
-
-    setShowConfirmation(false);
-
-    const role = roles.find((role) => role.name === "Finance");
-
-    // ✅ If no approval steps are selected, add a default one
-    const approvalSteps =
-      pendingRequest.approvalSteps.length > 0
-        ? pendingRequest.approvalSteps.map((step, index) => ({
-            approvalType: step.approvalType,
-            roleId: step.approvalType === "role" ? step.roleId : null,
-            userId: step.approvalType === "user" ? step.userId : null,
-            sequenceOrder: index + 1,
-          }))
-        : [
-            {
-              approvalType: "role",
-              roleId: role ? role.id : null,
-              userId: null,
-              sequenceOrder: 1,
-            },
-          ]; // ✅ Default approval step if none is selected
-
-    const finalData = {
-      ...pendingRequest,
-      approvalSteps,
-      userId: localStorage.getItem("userId"),
-      username: JSON.parse(localStorage.getItem("user")).name,
-    };
-
     try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      const finalData = {
+        ...pendingRequest,
+        userId: localStorage.getItem("userId"),
+        username: user.name,
+      };
       await ApiClient.post("/departments", finalData);
-      navigate("/departments"); // ✅ Redirect after success
+      navigate("/departments");
     } catch (err) {
       setError(err.response?.data?.message || "Failed to create department.");
-    }
-  };
-
-  const handleBack = () => {
-    if (window.confirm("Are you sure you want to go back? Unsaved changes will be lost.")) {
-      navigate("/departments");
+    } finally {
+      setShowConfirmation(false);
     }
   };
 
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4">Add Department</h1>
-
-      {error && <p className="text-red-500">{error}</p>}
+      {error && <ErrorModal message={error} onClose={() => setError("")} />}
+      {showFinanceWarning && (
+        <ErrorModal message="'Finance Approver' org role is either deactivated or not yet existing. Please contact your administrator." onClose={() => setShowFinanceWarning(false)} />
+      )}
 
       <form onSubmit={handleSubmit} className="bg-white p-6 shadow-md rounded">
         <div className="mb-4">
@@ -182,85 +156,109 @@ const AddDepartment = () => {
           />
         </div>
 
-        {/* Approval Steps Section */}
-        <div className="mb-4 hidden">
-          <h2 className="text-lg font-semibold mb-2">Approval Workflow</h2>
+        <div className="mb-4">
+          <label className="block text-sm font-medium">Approval Type</label>
+          <select
+            name="approvalType"
+            value={formData.approvalType}
+            onChange={handleChange}
+            className="w-full border p-2 rounded"
+          >
+            <option value="EXPENSE_APPROVAL">Expense Approval</option>
+          </select>
+        </div>
 
+        {/* Approval Steps */}
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold mb-2">Approval Steps</h2>
           {formData.approvalSteps.map((step, index) => (
             <div key={index} className="mb-4 p-3 border rounded bg-gray-100">
-              <p className="text-sm font-bold">Step {index + 1}</p>
-              <label className="block text-sm font-medium mt-2">Approval Type</label>
+              <p className="text-sm font-bold mb-1">Step {index + 1}</p>
+
+              <label className="block text-sm font-medium">Org Role</label>
               <select
-                onChange={(e) => handleApprovalStepChange(index, "approvalType", e.target.value)}
-                value={step.approvalType}
-                className="w-full border p-2 rounded"
+                value={step.orgRoleId || ""}
+                onChange={(e) => handleApprovalStepChange(index, "orgRoleId", e.target.value)}
+                className="w-full border p-2 rounded mb-2"
               >
-                <option value="">Select Type</option>
-                <option value="role">Role</option>
-                <option value="user">User</option>
+                <option value="">Select Org Role</option>
+                {orgRoles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.orgRoleCode} - {role.orgRoleDescription}
+                  </option>
+                ))}
               </select>
 
-              {step.approvalType === "role" && (
-                <select
-                  onChange={(e) => handleApprovalStepChange(index, "roleId", e.target.value)}
-                  value={step.roleId || ""}
-                  className="w-full border p-2 rounded mt-2"
-                >
-                  <option value="">Select Role</option>
-                  {roles.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <label className="block text-sm font-medium">Scope</label>
+              <select
+                value={step.scope || "DEPARTMENT"}
+                onChange={(e) => handleApprovalStepChange(index, "scope", e.target.value)}
+                className="w-full border p-2 rounded"
+              >
+                <option value="DEPARTMENT">DEPARTMENT</option>
+                <option value="COMPANY">COMPANY</option>
+              </select>
 
-              {step.approvalType === "user" && (
-                <select
-                  onChange={(e) => handleApprovalStepChange(index, "userId", e.target.value)}
-                  value={step.userId || ""}
-                  className="w-full border p-2 rounded mt-2"
-                >
-                  <option value="">Select User</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              <button type="button" onClick={() => removeApprovalStep(index)} className="text-red-500 mt-2">
+              <button
+                type="button"
+                onClick={() => removeApprovalStep(index)}
+                className="text-red-500 mt-2 block"
+              >
                 Remove Step
               </button>
             </div>
           ))}
-
-          <button type="button" onClick={addApprovalStep} className="mt-2 bg-blue-500 text-white p-2 rounded">
-            Add Approval Step
+          <button
+            type="button"
+            onClick={addApprovalStep}
+            className="bg-blue-500 text-white p-2 rounded mt-2"
+          >
+            Add Step
           </button>
         </div>
 
-        {/* ✅ Back & Submit Buttons */}
-        <div className="flex justify-center">
-          <button type="button" onClick={handleBack} className="bg-gray-500 text-white p-2 rounded hover:bg-gray-600">
-            Back
+        <div className="flex justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => navigate("/departments")}
+            className="bg-gray-500 text-white px-4 py-2 rounded"
+          >
+            Cancel
           </button>
-          &nbsp;
-          <button type="submit" className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">
+          <button
+            type="submit"
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
             Create Department
           </button>
         </div>
       </form>
 
-      {/* ✅ Confirmation Popup */}
       {showConfirmation && (
         <ConfirmationPopup
           message="Are you sure you want to create this department?"
-          onConfirm={confirmSubmit} // ✅ Proceed with API call
-          onCancel={() => setShowConfirmation(false)} // ❌ Cancel action
+          onConfirm={confirmSubmit}
+          onCancel={() => setShowConfirmation(false)}
         />
       )}
+
+      {showFinanceWarning && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded shadow-lg p-6 w-96 text-center fade-in-scale">
+            <h2 className="text-lg font-bold mb-4 text-red-600">Finance Org Role Missing</h2>
+            <p className="text-gray-700 mb-4">
+              'Finance Approver' org role is either deactivated or not yet existing. Please contact your administrator.
+            </p>
+            <button
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              onClick={() => navigate("/departments")}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -111,6 +111,9 @@ const SidebarContent = ({
             <Link to="/users" className="block hover:text-gray-300" onClick={toggleSidebar}>
               User Maintenance
             </Link>
+            <Link to="/orgRoles" className="block hover:text-gray-300" onClick={toggleSidebar}>
+              Org Roles Maintenance
+            </Link>
             <Link to="/departments" className="block hover:text-gray-300" onClick={toggleSidebar}>
               Department Maintenance
             </Link>
@@ -126,30 +129,28 @@ const SidebarContent = ({
     )}
 
     {/* Approval (Dropdown with Expand/Collapse Indicator) */}
-    {hasRole("Finance") && (
-      <div className="relative">
-        <button
-          className="flex items-center justify-between w-full p-3 hover:bg-gray-700 rounded focus:outline-none"
-          onClick={() => setIsApprovalOpen(!isApprovalOpen)}
-        >
-          <span className="flex items-center">
-            <MdApproval className="mr-2" />
-            Approval
-          </span>
-          {isApprovalOpen ? <FiChevronUp /> : <FiChevronDown />}
-        </button>
-        {isApprovalOpen && (
-          <div className="ml-6 mt-2 space-y-2">
-            <Link to="/approval/pending" className="block hover:text-gray-300" onClick={toggleSidebar}>
-              Pending Approvals
-            </Link>
-            <Link to="/approval/history" className="block hover:text-gray-300" onClick={toggleSidebar}>
-              Approval History
-            </Link>
-          </div>
-        )}
-      </div>
-    )}
+    <div className="relative">
+      <button
+        className="flex items-center justify-between w-full p-3 hover:bg-gray-700 rounded focus:outline-none"
+        onClick={() => setIsApprovalOpen(!isApprovalOpen)}
+      >
+        <span className="flex items-center">
+          <MdApproval className="mr-2" />
+          Approval
+        </span>
+        {isApprovalOpen ? <FiChevronUp /> : <FiChevronDown />}
+      </button>
+      {isApprovalOpen && (
+        <div className="ml-6 mt-2 space-y-2">
+          <Link to="/approval/pending" className="block hover:text-gray-300" onClick={toggleSidebar}>
+            Pending Approvals
+          </Link>
+          <Link to="/approval/history" className="block hover:text-gray-300" onClick={toggleSidebar}>
+            Approval History
+          </Link>
+        </div>
+      )}
+    </div>
 
     {/* Visa (Dropdown with Expand/Collapse Indicator) */}
     {hasRole("User") && (

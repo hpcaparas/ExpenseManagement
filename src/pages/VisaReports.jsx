@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import ApiClient from "../utils/ApiClient";
 import ReceiptModal from "../components/ReceiptModal";
 import { FaDownload, FaSearch } from "react-icons/fa";
+import config from "../config/config";
 
 const VisaReports = () => {
   const [reports, setReports] = useState([]);
@@ -18,7 +19,7 @@ const VisaReports = () => {
       const response = await ApiClient.get("/reports");
       setReports(response.data);
     } catch (err) {
-      console.error("Failed to fetch visa reports.");
+      console.error("Failed to fetch expense reports.");
     } finally {
       setLoading(false);
     }
@@ -30,11 +31,11 @@ const VisaReports = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", "visa_reports.xlsx");
+      link.setAttribute("download", "expense_reports.xlsx");
       document.body.appendChild(link);
       link.click();
     } catch (err) {
-      console.error("Failed to export visa reports.");
+      console.error("Failed to export expense reports.");
     }
   };
 
@@ -48,7 +49,7 @@ const VisaReports = () => {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Visa Reports</h1>
+      <h1 className="text-2xl font-bold mb-4">Expense Reports</h1>
 
       <div className="flex justify-between mb-4">
         <div className="relative">
@@ -89,7 +90,7 @@ const VisaReports = () => {
           <tbody>
             {filteredReports.length === 0 ? (
               <tr>
-                <td colSpan="7" className="text-center p-4">No visa reports found.</td>
+                <td colSpan="7" className="text-center p-4">No Expense reports found.</td>
               </tr>
             ) : (
               filteredReports.map((report) => (
@@ -103,7 +104,7 @@ const VisaReports = () => {
                   <td className="p-2 border">
                     {report.imageFilename ? (
                       <button
-                        onClick={() => setSelectedReceipt(`http://localhost:8080/uploads/${report.imageFilename}`)}
+                        onClick={() => setSelectedReceipt(`${config.baseUrl}uploads/${report.imageFilename}`)}
                         className="text-blue-500 hover:underline"
                       >
                         View Receipt
@@ -136,7 +137,7 @@ const VisaReports = () => {
                 <strong>Receipt:</strong>
                 {report.imageFilename ? (
                   <button
-                    onClick={() => setSelectedReceipt(`http://localhost:8080/uploads/${report.imageFilename}`)}
+                    onClick={() => setSelectedReceipt(`${config.baseUrl}uploads/${report.imageFilename}`)}
                     className="text-blue-500 hover:underline ml-2"
                   >
                     View Receipt

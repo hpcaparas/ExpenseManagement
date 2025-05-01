@@ -86,7 +86,7 @@ const DepartmentManagement = () => {
   };
 
   const paginatedDepartments = filteredDepartments.slice(
-    (currentPage - 1) * departmentsPerPage,
+    (currentPage - 1) * departmentsPerPage, 
     currentPage * departmentsPerPage
   );
 
