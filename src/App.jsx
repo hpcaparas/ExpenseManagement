@@ -12,7 +12,7 @@ import AddDepartment from "./pages/AddDepartment";
 import EditDepartment from "./pages/EditDepartment";
 import Layout from "./components/Layout";
 import ApplyVisa from "./pages/ApplyVisa";
-import Visa from "./pages/VisaList";
+import Visa from "./pages/VisaListWChildren";
 import PendingApproval from "./pages/PendingApproval";
 import ApprovalHistory from "./pages/ApprovalHistory";
 import VisaReports from "./pages/VisaReports";
@@ -20,7 +20,8 @@ import PasswordReset from "./pages/PasswordReset";
 import OrgRoleMaint from "./pages/OrgRoleManagement";
 import AddOrgRole from "./pages/AddOrgRole";
 import EditOrgRole from "./pages/EditOrgRole";
-import EditVisa from "./pages/EditVisa";
+import UpdateVisa from "./pages/UpdateVisa";
+import MfaChallenge from "./pages/MfaChallenge";
 
 function App() {
   return (
@@ -46,7 +47,8 @@ function App() {
         <Route path="/orgRoles" element={<Layout><OrgRoleMaint /></Layout>}/>
         <Route path="/orgRoles/addOrgRole" element={<Layout><AddOrgRole /></Layout>}/>
         <Route path="/orgRoles/editOrgRole/:id" element={<Layout><EditOrgRole /></Layout>}/>
-        <Route path="/visa/edit/:id" element={<Layout><EditVisa /></Layout>}/>
+        <Route path="/visa/edit/:id" element={<Layout><UpdateVisa /></Layout>}/>
+        <Route path="/mfa" element={<MfaChallenge />} />
       </Routes>
     </Router>
   );

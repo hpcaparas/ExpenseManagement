@@ -6,6 +6,7 @@ import ConfirmationPopup from "../components/ConfirmationPopup";
 import Lottie from "lottie-react";
 import loadingAnimation from "../images/lottie/lottie-loading-money.json";
 import imageCompression from "browser-image-compression";
+import config from "../config/config";
 
 const EditVisa = () => {
   const { id } = useParams();
@@ -28,19 +29,30 @@ const EditVisa = () => {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [preview, setPreview] = useState(null);
   const [compressedFile, setCompressedFile] = useState(null);
+  const [user, setUser] = useState(null);
+  const [workflowSteps, setWorkflowSteps] = useState([]);
+  const [approverSelections, setApproverSelections] = useState({});
+  const [originalImageFilename, setOriginalImageFilename] = useState(null);
 
   useEffect(() => {
-    fetchMetadata();
-    fetchVisa();
-  }, []);
+    const user_ = JSON.parse(localStorage.getItem("user"));
+    if (user_) {
+      setUser(user_);
+      setFormData((prev) => ({ ...prev, userId: user_.id }));
+      fetchMetadata(user_);
+    }
+  }, []);  
 
-  const fetchMetadata = async () => {
+  useEffect(() => {
+    if (user) {
+      fetchVisa(); // Call only after user is definitely available
+    }
+  }, [user]);
+
+  const fetchMetadata = async (user_) => {
     try {
-      const user = JSON.parse(localStorage.getItem("user"));
-      setFormData((prev) => ({ ...prev, userId: user.id }));
-
       const [deptRes, typeRes] = await Promise.all([
-        ApiClient.get(`/departments/company?companyName=${user.company.name}`),
+        ApiClient.get(`/departments/company?companyName=${user_.company.name}`),
         ApiClient.get("/types"),
       ]);
       setDepartments(deptRes.data);
@@ -56,7 +68,7 @@ const EditVisa = () => {
       const res = await ApiClient.get(`/visa/${id}`);
       const visa = res.data;
       setFormData({
-        userId: visa.user.id,
+        userId: user.id,
         departmentId: visa.department.id,
         typeId: visa.type.id,
         priceWithTax: visa.priceWithTax,
@@ -65,13 +77,38 @@ const EditVisa = () => {
         image: null,
       });
       setStatus(visa.status);
-      setPreview(visa.imageFilename ? `/uploads/${visa.imageFilename}` : null);
+      await fetchWorkflow(visa.department.id, visa.priceWithTax);
+      setPreview(visa.imageFilename ? `${config.baseUrl}uploads/${visa.imageFilename}` : null);
+      setOriginalImageFilename(visa.imageFilename);
     } catch (err) {
+      console.log(err);
       setErrorMessage("Failed to load application data.");
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchWorkflow = async (deptId, price) => {
+    try {
+      const response = await ApiClient.get(`/departments/${deptId}/workflow?approvalType=EXPENSE_APPROVAL`);
+      const workflow = response.data;
+  
+      const selections = {};
+      for (let step of workflow) {
+        if (step.users.length === 0) {
+          setErrorMessage(`No approver found for org role ${step.orgRoleCode}`);
+          return;
+        } else if (step.users.length === 1) {
+          selections[step.sequenceOrder] = step.users[0].id;
+        }
+      }
+  
+      setWorkflowSteps(workflow);
+      setApproverSelections(selections);
+    } catch (err) {
+      setErrorMessage(err.response?.data || "Failed to fetch workflow");
+    }
+  };  
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -113,7 +150,31 @@ const EditVisa = () => {
       });
       if (compressedFile) {
         formDataObj.set("image", compressedFile);
+      } else if (originalImageFilename) {
+        formDataObj.set("imageFilename", originalImageFilename); // 👈 Include this in backend
       }
+
+      const priceWithTax = Number(formData.priceWithTax);
+      let finalSteps = [];
+
+      for (let step of workflowSteps) {
+        const stepAmountLimit = Number(step.amountLimit || 0);
+        const isProcessor = step.stepType === 'PROCESSING';
+
+        if (isProcessor || priceWithTax > stepAmountLimit) {
+          finalSteps.push({
+            orgRoleId: step.orgRoleId,
+            scope: step.scope,
+            stepType: step.stepType,
+            selectedUserId: step.users.length === 1
+              ? step.users[0].id
+              : approverSelections[step.sequenceOrder]
+          });
+        }
+      }
+
+      formDataObj.append("approvalSteps", JSON.stringify(finalSteps));
+
 
       await ApiClient.put(`/visa/${id}`, formDataObj, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -127,11 +188,11 @@ const EditVisa = () => {
   };
 
   // Status check for edit permission
-  if (status && !["REJECTED", "RETURNED_BY_FINANCE"].includes(status)) {
+  if (status && !["DECLINED", "RETURNED_BY_FINANCE", "CANCELLED"].includes(status)) {
     return (
       <div className="p-6">
         <h1 className="text-xl font-bold mb-4">Edit Application</h1>
-        <p className="text-red-500">This application cannot be edited unless it is <b>Rejected</b> or <b>Returned by Finance</b>.</p>
+        <p className="text-red-500">This application cannot be edited unless it is <b>Rejected</b>, <b>Returned by Finance</b> or <b>Cancelled</b>.</p>
         <button onClick={() => navigate("/visa/visas")} className="mt-4 px-4 py-2 bg-gray-400 text-white rounded">
           Back to Applications
         </button>
@@ -167,6 +228,32 @@ const EditVisa = () => {
             ))}
           </select>
         </div>
+
+        {workflowSteps.map((step) => (
+          step.users.length > 1 && (
+            <div key={step.sequenceOrder} className="mb-4">
+              <label className="block text-sm font-medium">
+                Select Approver for Step {step.sequenceOrder} ({step.orgRoleDescription})
+              </label>
+              <select
+                value={approverSelections[step.sequenceOrder] || ""}
+                onChange={(e) =>
+                  setApproverSelections((prev) => ({
+                    ...prev,
+                    [step.sequenceOrder]: e.target.value,
+                  }))
+                }
+                required
+                className="w-full border p-2 rounded"
+              >
+                <option value="">Select Approver</option>
+                {step.users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.name}</option>
+                ))}
+              </select>
+            </div>
+          )
+        ))}
 
         <div className="mb-4">
           <label className="block text-sm font-medium">Type</label>
@@ -236,9 +323,22 @@ const EditVisa = () => {
           <img src={preview} alt="Receipt Preview" className="mt-2 rounded shadow-md w-full h-auto" />
         )}
 
-        <button type="submit" className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600">
-          Resubmit
-        </button>
+        <div className="flex justify-end gap-4 mt-6">
+          <button
+            type="button"
+            onClick={() => navigate("/visa/visas")}
+            className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500"
+          >
+            Back
+          </button>
+
+          <button
+            type="submit"
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          >
+            Resubmit
+          </button>
+        </div>
       </form>
 
       {showConfirmation && (

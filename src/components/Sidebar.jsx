@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import {
   FiHome,
   FiUsers,
@@ -9,7 +9,7 @@ import {
 } from "react-icons/fi";
 import { MdApproval, MdOutlineReport } from "react-icons/md";
 
-const Sidebar = ({ isOpen, toggleSidebar }) => {
+const Sidebar = ({ isOpen, toggleSidebar, closeSidebar }) => {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isApprovalOpen, setIsApprovalOpen] = useState(false);
   const [isVisaOpen, setIsVisaOpen] = useState(false);
@@ -20,54 +20,70 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser);
-        setUserRoles(user.roles.map((role) => role.name)); // Extract role names
+        setUserRoles((user.roles || []).map((role) => role.name));
       } catch (error) {
         console.error("Error parsing user data:", error);
       }
     }
   }, []);
 
-  // Function to check if user has a role
   const hasRole = (role) => userRoles.includes(role);
 
   return (
     <>
-      {/* Sidebar for Desktop */}
-      <div className="hidden md:flex flex-col bg-gray-900 text-white h-full w-64 pt-16 p-4 z-20 relative">
-        <SidebarContent
-          isAdminOpen={isAdminOpen}
-          setIsAdminOpen={setIsAdminOpen}
-          isApprovalOpen={isApprovalOpen}
-          setIsApprovalOpen={setIsApprovalOpen}
-          isVisaOpen={isVisaOpen}
-          setIsVisaOpen={setIsVisaOpen}
-          hasRole={hasRole}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-sm md:hidden"
+          onClick={closeSidebar}
         />
-      </div>
+      )}
 
-      {/* Sidebar for Mobile (conditionally shown) */}
-      <div
-        className={`fixed inset-0 bg-gray-900 text-white w-64 h-full z-30 transform ${
+      <aside className="hidden md:flex md:w-72 md:shrink-0 md:px-4 md:pb-4">
+        <div className="mt-24 flex h-[calc(100vh-7rem)] w-full flex-col rounded-[28px] border border-white/50 bg-slate-900 text-white shadow-[0_20px_60px_rgba(15,23,42,0.25)]">
+          <SidebarContent
+            isAdminOpen={isAdminOpen}
+            setIsAdminOpen={setIsAdminOpen}
+            isApprovalOpen={isApprovalOpen}
+            setIsApprovalOpen={setIsApprovalOpen}
+            isVisaOpen={isVisaOpen}
+            setIsVisaOpen={setIsVisaOpen}
+            closeSidebar={closeSidebar}
+            hasRole={hasRole}
+          />
+        </div>
+      </aside>
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-80 max-w-[85vw] transform bg-slate-900 text-white shadow-2xl transition-transform duration-300 md:hidden ${
           isOpen ? "translate-x-0" : "-translate-x-full"
-        } transition-transform duration-300 ease-in-out md:hidden`}
+        }`}
       >
-        <button
-          onClick={toggleSidebar}
-          className="absolute top-4 right-4 text-white text-xl"
-        >
-          ✕
-        </button>
-        <SidebarContent
-          isAdminOpen={isAdminOpen}
-          setIsAdminOpen={setIsAdminOpen}
-          isApprovalOpen={isApprovalOpen}
-          setIsApprovalOpen={setIsApprovalOpen}
-          isVisaOpen={isVisaOpen}
-          setIsVisaOpen={setIsVisaOpen}
-          toggleSidebar={toggleSidebar}
-          hasRole={hasRole}
-        />
-      </div>
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-5">
+            <div>
+              <div className="text-sm font-semibold text-white">Navigation</div>
+              <div className="text-xs text-white/60">Expense Management</div>
+            </div>
+            <button
+              onClick={toggleSidebar}
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white/80"
+            >
+              ✕
+            </button>
+          </div>
+
+          <SidebarContent
+            isAdminOpen={isAdminOpen}
+            setIsAdminOpen={setIsAdminOpen}
+            isApprovalOpen={isApprovalOpen}
+            setIsApprovalOpen={setIsApprovalOpen}
+            isVisaOpen={isVisaOpen}
+            setIsVisaOpen={setIsVisaOpen}
+            closeSidebar={closeSidebar}
+            hasRole={hasRole}
+          />
+        </div>
+      </aside>
     </>
   );
 };
@@ -79,117 +95,147 @@ const SidebarContent = ({
   setIsApprovalOpen,
   isVisaOpen,
   setIsVisaOpen,
-  toggleSidebar, // ✅ Receive toggleSidebar function
+  closeSidebar,
   hasRole,
 }) => (
-  <div className="mt-6">
-    {/* Home */}
-    <Link
-      to="/dashboard"
-      className="flex items-center p-3 hover:bg-gray-700 rounded"
-      onClick={toggleSidebar} // ✅ Close menu when clicked
-    >
-      <FiHome className="mr-2" />
-      Home
-    </Link>
-
-    {/* Admin (Dropdown with Expand/Collapse Indicator) */}
-    {hasRole("Admin") && (
-      <div className="relative">
-        <button
-          className="flex items-center justify-between w-full p-3 hover:bg-gray-700 rounded focus:outline-none"
-          onClick={() => setIsAdminOpen(!isAdminOpen)}
-        >
-          <span className="flex items-center">
-            <FiUsers className="mr-2" />
-            Admin
-          </span>
-          {isAdminOpen ? <FiChevronUp /> : <FiChevronDown />}
-        </button>
-        {isAdminOpen && (
-          <div className="ml-6 mt-2 space-y-2">
-            <Link to="/users" className="block hover:text-gray-300" onClick={toggleSidebar}>
-              User Maintenance
-            </Link>
-            <Link to="/orgRoles" className="block hover:text-gray-300" onClick={toggleSidebar}>
-              Org Roles Maintenance
-            </Link>
-            <Link to="/departments" className="block hover:text-gray-300" onClick={toggleSidebar}>
-              Department Maintenance
-            </Link>
-            <Link to="/types" className="block hover:text-gray-300" onClick={toggleSidebar}>
-              Type Maintenance
-            </Link>
-            <Link to="/adminPasswordReset" className="block hover:text-gray-300" onClick={toggleSidebar}>
-              Password Reset
-            </Link>
-          </div>
-        )}
+  <div className="flex-1 overflow-y-auto px-4 py-5">
+    <div className="mb-4 px-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">
+        Main
       </div>
-    )}
-
-    {/* Approval (Dropdown with Expand/Collapse Indicator) */}
-    <div className="relative">
-      <button
-        className="flex items-center justify-between w-full p-3 hover:bg-gray-700 rounded focus:outline-none"
-        onClick={() => setIsApprovalOpen(!isApprovalOpen)}
-      >
-        <span className="flex items-center">
-          <MdApproval className="mr-2" />
-          Approval
-        </span>
-        {isApprovalOpen ? <FiChevronUp /> : <FiChevronDown />}
-      </button>
-      {isApprovalOpen && (
-        <div className="ml-6 mt-2 space-y-2">
-          <Link to="/approval/pending" className="block hover:text-gray-300" onClick={toggleSidebar}>
-            Pending Approvals
-          </Link>
-          <Link to="/approval/history" className="block hover:text-gray-300" onClick={toggleSidebar}>
-            Approval History
-          </Link>
-        </div>
-      )}
     </div>
 
-    {/* Visa (Dropdown with Expand/Collapse Indicator) */}
-    {hasRole("User") && (
-      <div className="relative">
-        <button
-          className="flex items-center justify-between w-full p-3 hover:bg-gray-700 rounded focus:outline-none"
-          onClick={() => setIsVisaOpen(!isVisaOpen)}
-        >
-          <span className="flex items-center">
-            <FiFile className="mr-2" />
-            Expenses
-          </span>
-          {isVisaOpen ? <FiChevronUp /> : <FiChevronDown />}
-        </button>
-        {isVisaOpen && (
-          <div className="ml-6 mt-2 space-y-2">
-            <Link to="/visa/visas" className="block hover:text-gray-300" onClick={toggleSidebar}>
-              Applied Expenses
-            </Link>
-            <Link to="/visa/applyVisa" className="block hover:text-gray-300" onClick={toggleSidebar}>
-              Apply Expense
-            </Link>
-          </div>
-        )}
-      </div>
+    <div className="space-y-1">
+      <NavItem to="/dashboard" icon={<FiHome />} onClick={closeSidebar}>
+        Home
+      </NavItem>
+    </div>
+
+    {hasRole("Admin") && (
+      <SidebarGroup
+        title="Administration"
+        icon={<FiUsers />}
+        open={isAdminOpen}
+        setOpen={setIsAdminOpen}
+      >
+        <SubNavItem to="/users" onClick={closeSidebar}>
+          User Maintenance
+        </SubNavItem>
+        <SubNavItem to="/orgRoles" onClick={closeSidebar}>
+          Org Roles Maintenance
+        </SubNavItem>
+        <SubNavItem to="/departments" onClick={closeSidebar}>
+          Department Maintenance
+        </SubNavItem>
+        <SubNavItem to="/types" onClick={closeSidebar}>
+          Type Maintenance
+        </SubNavItem>
+        <SubNavItem to="/adminPasswordReset" onClick={closeSidebar}>
+          Password Reset
+        </SubNavItem>
+      </SidebarGroup>
     )}
 
-    {/* Reports */}
-    {hasRole("Finance") && (
-      <Link
-        to="/reports"
-        className="flex items-center p-3 hover:bg-gray-700 rounded"
-        onClick={toggleSidebar}
+    {hasRole("Default") && (
+      <SidebarGroup
+        title="Requests"
+        icon={<FiFile />}
+        open={isVisaOpen}
+        setOpen={setIsVisaOpen}
       >
-        <MdOutlineReport className="mr-2" />
-        Reports
-      </Link>
+        <SubNavItem to="/visa/applyVisa" onClick={closeSidebar}>
+          New Request
+        </SubNavItem>
+        <SubNavItem to="/visa/visas" onClick={closeSidebar}>
+          Request Status
+        </SubNavItem>
+      </SidebarGroup>
+    )}
+
+    {(hasRole("Default") || hasRole("Reports")) && (
+      <SidebarGroup
+        title={hasRole("Processor") ? "Processing" : "Approval"}
+        icon={<MdApproval />}
+        open={isApprovalOpen}
+        setOpen={setIsApprovalOpen}
+      >
+        <SubNavItem to="/approval/pending" onClick={closeSidebar}>
+          {hasRole("Processor") ? "Process Requests" : "Pending Approvals"}
+        </SubNavItem>
+        <SubNavItem to="/approval/history" onClick={closeSidebar}>
+          {hasRole("Processor") ? "Request History" : "Approval History"}
+        </SubNavItem>
+      </SidebarGroup>
+    )}
+
+    {hasRole("Reports") && (
+      <div className="mt-2">
+        <NavItem to="/reports" icon={<MdOutlineReport />} onClick={closeSidebar}>
+          Reports
+        </NavItem>
+      </div>
     )}
   </div>
 );
+
+function NavItem({ to, icon, children, onClick }) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onClick}
+      className={({ isActive }) =>
+        `group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition ${
+          isActive
+            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-900/20"
+            : "text-white/75 hover:bg-white/10 hover:text-white"
+        }`
+      }
+    >
+      <span className="text-lg">{icon}</span>
+      <span>{children}</span>
+    </NavLink>
+  );
+}
+
+function SidebarGroup({ title, icon, open, setOpen, children }) {
+  return (
+    <div className="mt-2">
+      <button
+        className="flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+        onClick={() => setOpen(!open)}
+      >
+        <span className="flex items-center gap-3">
+          <span className="text-lg">{icon}</span>
+          {title}
+        </span>
+        <span>{open ? <FiChevronUp /> : <FiChevronDown />}</span>
+      </button>
+
+      {open && (
+        <div className="mt-2 ml-4 space-y-1 border-l border-white/10 pl-4">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubNavItem({ to, children, onClick }) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onClick}
+      className={({ isActive }) =>
+        `block rounded-xl px-3 py-2 text-sm transition ${
+          isActive
+            ? "bg-white/12 text-white"
+            : "text-white/60 hover:bg-white/6 hover:text-white/85"
+        }`
+      }
+    >
+      {children}
+    </NavLink>
+  );
+}
 
 export default Sidebar;

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import ApiClient from "../utils/ApiClient";
 import ReceiptModal from "../components/ReceiptModal";
 import config from "../config/config";
+import ConfirmationPopup from "../components/ConfirmationPopup";
 
 const FINANCE_APPROVER_LABEL = "Finance Approver"; // adjust if needed
 
@@ -10,6 +11,9 @@ const VisaList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [selectedVisaToCancel, setSelectedVisaToCancel] = useState(null);
+
 
   useEffect(() => {
     fetchVisaApplications();
@@ -79,6 +83,36 @@ const VisaList = () => {
     return uniqueNames.join(", ");
   };
 
+  const handleCancelClick = (visa) => {
+    setSelectedVisaToCancel(visa);
+    setShowCancelConfirm(true);
+  };
+  const confirmCancel = async () => {
+    if (!selectedVisaToCancel) return;
+  
+    try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      await ApiClient.post(`/approval/cancel/${selectedVisaToCancel.id}?userId=${user.id}`);
+      setShowCancelConfirm(false);
+      setSelectedVisaToCancel(null);
+      fetchVisaApplications(); // refresh the list
+    } catch (err) {
+      console.error(err);
+      alert("Failed to cancel application.");
+    }
+  };  
+
+  const getDeclineRemarksWithApprover = (approvals) => {
+    const declined = approvals?.find((a) => a.status === "DECLINED");
+    if (!declined) return "N/A";
+  
+    const label = declined.isProcessor ? "Processor" : "Approver";
+    const name = declined.approverName || declined.approverRoleName || "Unknown";
+  
+    return `${name} - ${declined.remarks || "No remarks"}`;
+  };
+  
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4">My Expense Applications</h1>
@@ -95,9 +129,11 @@ const VisaList = () => {
               <th className="p-2 border">Type</th>
               <th className="p-2 border">Price (With Tax)</th>
               <th className="p-2 border">Status</th>
+              <th className="p-2 border">Remarks</th>
               <th className="p-2 border">Current Approver</th>
               <th className="p-2 border">Approved By</th>
               <th className="p-2 border">Approvers</th>
+              <th className="p-2 border">Approver Remarks</th>
               <th className="p-2 border">Actions</th>
             </tr>
           </thead>
@@ -107,50 +143,71 @@ const VisaList = () => {
                 <td colSpan="8" className="text-center p-4">No expense applications found.</td>
               </tr>
             ) : (
-              visaApplications.map((visa) => (
-                <tr key={visa.id} className="border">
-                  <td className="p-2 border">{visa.department ? visa.department.name : "N/A"}</td>
-                  <td className="p-2 border">{visa.type ? visa.type.name : "N/A"}</td>
-                  <td className="p-2 border">${visa.priceWithTax ? visa.priceWithTax.toFixed(2) : "0.00"}</td>
-                  <td className={`p-2 border font-bold ${getStatusColor(visa.status)}`}>{visa.status}</td>
-                  <td className="p-2 border">{getCurrentApprover(visa.approvals)}</td>
-                  <td className="p-2 border">{formatApprovedBy(visa.approvals)}</td>
-                  <td className="p-2 border">{getAllApprovers(visa)}</td>
-                  <td className="p-2 border">
-                    {visa.imageFilename ? (
-                      <span
-                        onClick={() => setSelectedReceipt(`${config.baseUrl}uploads/${visa.imageFilename}`)}
-                        className="text-blue-500 hover:underline cursor-pointer"
-                        style={{ marginRight: "16px" }}
-                      >
-                        View Receipt
-                      </span>
-                    ) : (
-                      <span style={{ marginRight: "16px" }}>No Image</span>
-                    )}
+              visaApplications.map((visa) => {
+                const isCancellable = ["PENDING", "FINANCE_PROCESSING"].includes(visa.status);
+                return (
+                  <tr key={visa.id} className="border">
+                    <td className="p-2 border">{visa.department ? visa.department.name : "N/A"}</td>
+                    <td className="p-2 border">{visa.type ? visa.type.name : "N/A"}</td>
+                    <td className="p-2 border">${visa.priceWithTax ? visa.priceWithTax.toFixed(2) : "0.00"}</td>
+                    <td className={`p-2 border font-bold ${getStatusColor(visa.status)}`}>{visa.status}</td>
+                    <td className="p-2 border">{visa.remarks ? visa.remarks : "N/A"}</td>
+                    <td className="p-2 border">{getCurrentApprover(visa.approvals)}</td>
+                    <td className="p-2 border">{formatApprovedBy(visa.approvals)}</td>
+                    <td className="p-2 border">{getAllApprovers(visa)}</td>
+                    <td className="p-2 border">{getDeclineRemarksWithApprover(visa.approvals)}</td>
+                    <td className="p-2 border">
+                      {visa.imageFilename ? (
+                        <span
+                          onClick={() => setSelectedReceipt(`${config.baseUrl}uploads/${visa.imageFilename}`)}
+                          className="text-blue-500 hover:underline cursor-pointer"
+                          style={{ marginRight: "16px" }}
+                        >
+                          View Receipt
+                        </span>
+                      ) : (
+                        <span style={{ marginRight: "16px" }}>No Image</span>
+                      )}
 
-                    {/* Edit Action */}
-                    <span
-                      className={`${
-                        ["DECLINED", "RETURNED_BY_FINANCE"].includes(visa.status)
-                          ? "text-blue-600 hover:underline cursor-pointer"
-                          : "text-gray-400 cursor-not-allowed"
-                      }`}
-                      onClick={() => {
-                        if (["DECLINED", "RETURNED_BY_FINANCE"].includes(visa.status)) {
-                          window.location.href = `/visa/edit/${visa.id}`;
-                        }
-                      }}
-                      style={{
-                        userSelect: "none",
-                        pointerEvents: ["DECLINED", "RETURNED_BY_FINANCE"].includes(visa.status) ? "auto" : "none",
-                      }}
-                    >
-                      Edit
-                    </span>
-                  </td>
-                </tr>
-              ))
+                      {/* Edit Action */}
+                      <span
+                        className={`${
+                          ["DECLINED", "RETURNED_BY_FINANCE", "CANCELLED"].includes(visa.status)
+                            ? "text-blue-600 hover:underline cursor-pointer"
+                            : "text-gray-400 cursor-not-allowed"
+                        }`}
+                        onClick={() => {
+                          if (["DECLINED", "RETURNED_BY_FINANCE", "CANCELLED"].includes(visa.status)) {
+                            window.location.href = `/visa/edit/${visa.id}`;
+                          }
+                        }}
+                        style={{
+                          userSelect: "none",
+                          pointerEvents: ["DECLINED", "RETURNED_BY_FINANCE", "CANCELLED"].includes(visa.status) ? "auto" : "none",
+                        }}
+                      >
+                        Resubmit
+                      </span>
+
+                      <span
+                        className={`${
+                          isCancellable ? "text-red-600 hover:underline cursor-pointer" : "text-gray-400 cursor-not-allowed"
+                        } ml-4`}
+                        onClick={() => {
+                          if (isCancellable) handleCancelClick(visa);
+                        }}
+                        style={{
+                          pointerEvents: isCancellable ? "auto" : "none",
+                          userSelect: "none",
+                        }}
+                      >
+                        Cancel
+                      </span>
+
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
@@ -161,6 +218,16 @@ const VisaList = () => {
 
       {/* Receipt Modal */}
       {selectedReceipt && <ReceiptModal imageUrl={selectedReceipt} onClose={() => setSelectedReceipt(null)} />}
+      {showCancelConfirm && (
+      <ConfirmationPopup
+        message="Are you sure you want to cancel this application?"
+        onConfirm={confirmCancel}
+        onCancel={() => {
+          setShowCancelConfirm(false);
+          setSelectedVisaToCancel(null);
+        }}
+      />
+    )}
     </div>
   );
 };

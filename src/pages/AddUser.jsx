@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import ApiClient from "../utils/ApiClient";
 import ConfirmationPopup from "../components/ConfirmationPopup"; // ✅ Import ConfirmationPopup
+import InfoTooltip from "../components/InfoTooltip";
+import fieldHelpMessages from "../config/fieldHelpMessages";
 
 const AddUser = () => {
     const [formData, setFormData] = useState({
@@ -24,14 +26,14 @@ const AddUser = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        fetchMetadata();
-        getLoggedInCompanyId(); // ✅ Fetch company ID from localStorage
+        const companyId = getLoggedInCompanyId();
+        fetchMetadata(companyId);
     }, []);
 
-    const fetchMetadata = async () => {
+    const fetchMetadata = async (companyId) => {
         try {
             const [rolesRes, deptRes] = await Promise.all([
-                ApiClient.get("/roles"),
+                ApiClient.get(`/roles/company/${companyId}`),
                 ApiClient.get("/departments"),
             ]);
 
@@ -49,11 +51,14 @@ const AddUser = () => {
     const getLoggedInCompanyId = () => {
         const user = JSON.parse(localStorage.getItem("user"));
         if (user && user.company && user.company.id) {
+            const companyId = user.company.id;
             setFormData((prevState) => ({
                 ...prevState,
-                companyId: user.company.id, // ✅ Set companyId from logged-in user
+                companyId: companyId, // ✅ Set companyId from logged-in user
             }));
+            return companyId;
         }
+        return null;
     };
 
     const handleChange = (e) => {
@@ -143,7 +148,11 @@ const AddUser = () => {
                 </div>
 
                 <div className="mb-4">
-                    <label className="block text-sm font-medium">User Roles</label>
+                <label className="block mb-1 font-medium">
+                    User Permission
+                    <InfoTooltip message={fieldHelpMessages.userRole} />
+                </label>
+
                     <select
                         name="roleIds"
                         multiple
@@ -154,14 +163,18 @@ const AddUser = () => {
                     >
                         {roles.map((role) => (
                             <option key={role.id} value={role.id}>
-                                {role.name}
+                                {role.description}
                             </option>
                         ))}
                     </select>
                 </div>
 
                 <div className="mb-4">
-                    <label className="block text-sm font-medium">Org Roles</label>
+                <label className="block mb-1 font-medium">
+                    Org Role
+                    <InfoTooltip message={fieldHelpMessages.orgRole} />
+                </label>
+
                     <select
                         multiple
                         value={formData.orgRoleIds}
@@ -173,7 +186,7 @@ const AddUser = () => {
                         >
                         {orgRoles.map((role) => (
                             <option key={role.id} value={role.id}>
-                            {role.orgRoleCode} - {role.orgRoleDescription}
+                            {role.orgRoleDescription}
                             </option>
                         ))}
                     </select>
@@ -182,7 +195,10 @@ const AddUser = () => {
 
 
                 <div className="mb-4">
-                    <label className="block text-sm font-medium">Departments</label>
+                    <label className="block mb-1 font-medium">
+                        Department
+                        <InfoTooltip message={fieldHelpMessages.department} />
+                    </label>
                     <select
                         name="departmentIds"
                         multiple

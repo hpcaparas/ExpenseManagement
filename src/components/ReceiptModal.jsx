@@ -1,41 +1,52 @@
 import React, { useState, useRef } from "react";
+import {
+  FiX,
+  FiDownload,
+  FiZoomIn,
+  FiZoomOut,
+  FiRotateCcw,
+  FiImage,
+} from "react-icons/fi";
 
 const ReceiptModal = ({ imageUrl, onClose }) => {
-  const [scale, setScale] = useState(1); // Zoom level
-  const [position, setPosition] = useState({ x: 0, y: 0 }); // Image position
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
   const imgRef = useRef(null);
   const containerRef = useRef(null);
 
+  const resetView = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
   const handleDownload = async () => {
     try {
-      const response = await fetch(imageUrl, { mode: "cors" }); // Ensure CORS is allowed
+      const response = await fetch(imageUrl, { mode: "cors" });
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
 
       const link = document.createElement("a");
       link.href = blobUrl;
-      link.download = imageUrl.split("/").pop() || "downloaded-image.jpg"; // Extract filename or set default
+      link.download = imageUrl.split("/").pop() || "receipt.jpg";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      // Cleanup
       URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error("Error downloading image:", error);
       alert("Failed to download image. Please try again.");
     }
   };
-  // Zoom in/out with mouse scroll
+
   const handleWheelZoom = (e) => {
     e.preventDefault();
-    const zoomAmount = e.deltaY > 0 ? -0.1 : 0.1;
-    setScale((prevScale) => Math.min(Math.max(prevScale + zoomAmount, 1), 3)); // Limit zoom from 1x to 3x
+    const zoomAmount = e.deltaY > 0 ? -0.12 : 0.12;
+    setScale((prevScale) => Math.min(Math.max(prevScale + zoomAmount, 1), 3));
   };
 
-  // Handle drag to move image when zoomed in
   const handleMouseDown = (e) => {
-    if (scale === 1) return; // No drag if zoom is 1x
+    if (scale === 1) return;
 
     const startX = e.clientX;
     const startY = e.clientY;
@@ -46,8 +57,8 @@ const ReceiptModal = ({ imageUrl, onClose }) => {
       const dy = moveEvent.clientY - startY;
 
       setPosition({
-        x: Math.max(-200, Math.min(200, startPos.x + dx)), // Limit movement
-        y: Math.max(-200, Math.min(200, startPos.y + dy)),
+        x: Math.max(-240, Math.min(240, startPos.x + dx)),
+        y: Math.max(-240, Math.min(240, startPos.y + dy)),
       });
     };
 
@@ -60,9 +71,9 @@ const ReceiptModal = ({ imageUrl, onClose }) => {
     window.addEventListener("mouseup", handleMouseUp);
   };
 
-  // Zoom with pinch on touch devices
   const handleTouchStart = (e) => {
     if (e.touches.length !== 2) return;
+
     const [touch1, touch2] = e.touches;
     const startDistance = Math.hypot(
       touch2.clientX - touch1.clientX,
@@ -71,11 +82,13 @@ const ReceiptModal = ({ imageUrl, onClose }) => {
 
     const handleTouchMove = (moveEvent) => {
       if (moveEvent.touches.length !== 2) return;
+
       const [newTouch1, newTouch2] = moveEvent.touches;
       const newDistance = Math.hypot(
         newTouch2.clientX - newTouch1.clientX,
         newTouch2.clientY - newTouch1.clientY
       );
+
       const zoomFactor = newDistance / startDistance;
       setScale((prevScale) => Math.min(Math.max(prevScale * zoomFactor, 1), 3));
     };
@@ -92,21 +105,34 @@ const ReceiptModal = ({ imageUrl, onClose }) => {
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-[9999]"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
       onWheel={handleWheelZoom}
     >
-      <div className="relative bg-white p-4 rounded-lg shadow-lg max-w-3xl w-full">
-        {/* Close Button */}
-        <button
-          className="absolute top-2 right-2 bg-gray-700 text-white rounded-full px-3 py-1 text-lg hover:bg-gray-900 z-[99999]"
-          onClick={onClose}
-        >
-          ✕
-        </button>
+      <div className="relative w-full max-w-6xl overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+        <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-white">
+              <FiImage className="text-lg" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-white">Receipt Preview</div>
+              <div className="text-xs text-white/60">
+                Scroll to zoom • drag when zoomed in • pinch on touch devices
+              </div>
+            </div>
+          </div>
 
-        {/* Image with Zoom & Drag */}
+          <button
+            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition hover:bg-white/10 hover:text-white"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <FiX className="text-lg" />
+          </button>
+        </div>
+
         <div
-          className="flex justify-center items-center overflow-hidden"
+          className="flex min-h-[60vh] items-center justify-center overflow-hidden bg-slate-950"
           onMouseDown={handleMouseDown}
           onTouchStart={handleTouchStart}
         >
@@ -114,63 +140,68 @@ const ReceiptModal = ({ imageUrl, onClose }) => {
             ref={imgRef}
             src={imageUrl}
             alt="Receipt Preview"
-            className="cursor-grab"
+            className={`select-none object-contain ${scale > 1 ? "cursor-grab" : "cursor-default"}`}
             style={{
-              transform: `scale(${scale}) translate(${position.x}px, ${position.y}px)`,
+              transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
               transition: "transform 0.1s ease-out",
               maxWidth: "100%",
-              maxHeight: "80vh",
-              objectFit: "contain",
+              maxHeight: "78vh",
             }}
           />
         </div>
-        
-        {/* Zoom Controls */}
-        <div className="flex justify-center mt-4 space-x-4">
-          {/* Download Button */}
-          <button
-            onClick={handleDownload}
-            className="bg-white text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            ⬇️
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max bg-black text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              Download Image
-            </span>
-          </button>
-          <button
-            onClick={() => setScale((prev) => Math.min(prev + 0.2, 3))}
-            className="bg-white text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            ➕
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max bg-black text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              Zoom In
-            </span>
-          </button>
-          <button
-            onClick={() => setScale((prev) => Math.max(prev - 0.2, 1))}
-            className="bg-white text-white px-4 py-2 rounded hover:bg-gray-700"
-          >
-            ➖
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max bg-black text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              Zoom Out
-            </span>
-          </button>
-          <button
-            onClick={() => {
-              setScale(1);
-              setPosition({ x: 0, y: 0 });
-            }}
-            className="bg-red-500 text-red px-4 py-2 rounded hover:bg-red-700"
-          >
-            🔄 Reset
-            <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max bg-black text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              Reset Zoom
-            </span>
-          </button>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-white/5 px-5 py-4">
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70">
+            Zoom: {(scale * 100).toFixed(0)}%
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <ControlButton
+              icon={<FiDownload />}
+              label="Download"
+              onClick={handleDownload}
+            />
+            <ControlButton
+              icon={<FiZoomIn />}
+              label="Zoom In"
+              onClick={() => setScale((prev) => Math.min(prev + 0.2, 3))}
+            />
+            <ControlButton
+              icon={<FiZoomOut />}
+              label="Zoom Out"
+              onClick={() => setScale((prev) => Math.max(prev - 0.2, 1))}
+            />
+            <ControlButton
+              icon={<FiRotateCcw />}
+              label="Reset"
+              onClick={resetView}
+              variant="danger"
+            />
+          </div>
         </div>
       </div>
     </div>
   );
 };
+
+function ControlButton({ icon, label, onClick, variant = "default" }) {
+  const styles = {
+    default:
+      "border-white/10 bg-white/5 text-white/85 hover:bg-white/10 hover:text-white",
+    danger:
+      "border-red-400/20 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-white",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition ${styles[variant]}`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
 
 export default ReceiptModal;

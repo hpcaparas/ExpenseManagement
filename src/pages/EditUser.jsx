@@ -1,243 +1,286 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import {
+  FiUser,
+  FiMail,
+  FiShield,
+  FiBriefcase,
+  FiUsers,
+  FiSave,
+  FiArrowLeft,
+} from "react-icons/fi";
 import ApiClient from "../utils/ApiClient";
-import ConfirmationPopup from "../components/ConfirmationPopup"; // ✅ Import ConfirmationPopup
+import ConfirmationPopup from "../components/ConfirmationPopup";
+import InfoTooltip from "../components/InfoTooltip";
+import { PageHeader } from "../components/PageHeader";
+import { SectionCard } from "../components/SectionCard";
+import fieldHelpMessages from "../config/fieldHelpMessages";
 
 const EditUser = () => {
-    const { id } = useParams(); // ✅ Get user ID from URL
-    const [formData, setFormData] = useState({
-        name: "",
-        username: "",
-        email: "",
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [formData, setFormData] = useState({
+    name: "",
+    username: "",
+    email: "",
+    password: "",
+    roleIds: [],
+    departmentIds: [],
+    companyId: "",
+    orgRoleIds: [],
+  });
+
+  const [roles, setRoles] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [orgRoles, setOrgRoles] = useState([]);
+
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
+
+  useEffect(() => {
+    const init = async () => {
+      const companyId = await fetchUserDetails();
+      if (companyId) fetchMetadata(companyId);
+    };
+    init();
+  }, []);
+
+  const fetchUserDetails = async () => {
+    try {
+      const response = await ApiClient.get(`/users/${id}`);
+      const userData = response.data;
+      const companyId = userData.company ? userData.company.id : null;
+
+      setFormData((prev) => ({
+        ...prev,
+        name: userData.name || "",
+        username: userData.username || "",
+        email: userData.email || "",
         password: "",
-        roleIds: [],
-        departmentIds: [],
-        companyId: "",
-        orgRoleIds: [],
-    });
+        roleIds: userData.roles?.map((r) => r.id) || [],
+        orgRoleIds: userData.orgRoles?.map((r) => r.id) || [],
+        departmentIds: userData.departments?.map((d) => d.id) || [],
+        companyId: companyId,
+      }));
 
-    const [roles, setRoles] = useState([]);
-    const [departments, setDepartments] = useState([]);
-    const [error, setError] = useState("");
-    const [loading, setLoading] = useState(false);
-    const [showPopup, setShowPopup] = useState(false);
-    const [orgRoles, setOrgRoles] = useState([]);
-    const navigate = useNavigate();
+      return companyId;
+    } catch (err) {
+      setError("Failed to load user details.");
+    }
+  };
 
-    useEffect(() => {
-        fetchMetadata();
-        fetchUserDetails();
-    }, []);
+  const fetchMetadata = async (companyId) => {
+    try {
+      const [rolesRes, deptRes] = await Promise.all([
+        ApiClient.get(`/roles/company/${companyId}`),
+        ApiClient.get("/departments"),
+      ]);
 
-    const fetchMetadata = async () => {
-        try {
-            const [rolesRes, deptRes] = await Promise.all([
-                ApiClient.get("/roles"),
-                ApiClient.get("/departments"),
-            ]);
-            setRoles(rolesRes.data);
-            setDepartments(deptRes.data);
+      setRoles(rolesRes.data || []);
+      setDepartments(deptRes.data || []);
 
-            const companyName = JSON.parse(localStorage.getItem("user")).company.name;
-            const orgRoleRes = await ApiClient.get(`/org-roles?companyName=${companyName}`);
-            setOrgRoles(orgRoleRes.data);
-        } catch (err) {
-            setError("Failed to load roles, departments , or org roles.");
-        }
-    };
+      const companyName = JSON.parse(localStorage.getItem("user")).company.name;
+      const orgRoleRes = await ApiClient.get(
+        `/org-roles?companyName=${companyName}`
+      );
 
-    const fetchUserDetails = async () => {
-        try {
-            const response = await ApiClient.get(`/users/${id}`);
-            const userData = response.data;
-    
-            setFormData((prevState) => ({
-                ...prevState,
-                name: userData.name || "",
-                username: userData.username || "",
-                email: userData.email || "",
-                password: "", // ✅ Keep password empty unless updating
-                roleIds: userData.roles ? userData.roles.map((role) => role.id) : [],
-                orgRoleIds: userData.orgRoles ? userData.orgRoles.map((r) => r.id) : [],
-                departmentIds: userData.departments ? userData.departments.map((dept) => dept.id) : [],
-                companyId: userData.company ? userData.company.id : null, // ✅ Safely handle missing `company`
-            }));
-        } catch (err) {
-            setError("Failed to load user details.");
-        }
-    };
-    
-    
+      setOrgRoles(orgRoleRes.data || []);
+    } catch (err) {
+      setError("Failed to load roles, departments or org roles.");
+    }
+  };
 
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
-    const handleMultiSelect = (e, field) => {
-        const selectedValues = Array.from(e.target.selectedOptions, (option) =>
-            Number(option.value)
-        );
-        setFormData({ ...formData, [field]: selectedValues });
-    };
+  const handleMultiSelect = (e, field) => {
+    const values = Array.from(e.target.selectedOptions, (o) => Number(o.value));
+    setFormData({ ...formData, [field]: values });
+  };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError("");
-        setLoading(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
-        try {
-            await ApiClient.put(`/users/${id}`, formData);
-            setShowPopup(true); // ✅ Show confirmation popup
-        } catch (err) {
-            setError(err.response?.data?.message || "Failed to update user.");
-        } finally {
-            setLoading(false);
-        }
-    };
+    try {
+      await ApiClient.put(`/users/${id}`, formData);
+      setShowPopup(true);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update user.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handleBack = () => {
-        if (window.confirm("Are you sure you want to go back? Unsaved changes will be lost.")) {
-            navigate("/users");
-        }
-    };
+  const handleBack = () => {
+    if (
+      window.confirm("Are you sure you want to go back? Unsaved changes will be lost.")
+    ) {
+      navigate("/users");
+    }
+  };
 
-    return (
-        <div className="p-6">
-            <h1 className="text-2xl font-bold mb-4">Edit User</h1>
+  return (
+    <div className="w-full rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+      <PageHeader
+        eyebrow="Administration"
+        title="Edit User"
+        subtitle="Update user information, permissions, and organizational roles."
+      />
 
-            {error && <p className="text-red-500">{error}</p>}
-
-            <form onSubmit={handleSubmit} className="bg-white p-6 shadow-md rounded">
-                <div className="mb-4">
-                    <label className="block text-sm font-medium">Full Name</label>
-                    <input
-                        type="text"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleChange}
-                        required
-                        className="w-full border p-2 rounded"
-                    />
-                </div>
-
-                <div className="mb-4">
-                    <label className="block text-sm font-medium">Username</label>
-                    <input
-                        type="text"
-                        name="username"
-                        value={formData.username}
-                        onChange={handleChange}
-                        required
-                        className="w-full border p-2 rounded"
-                    />
-                </div>
-
-                <div className="mb-4">
-                    <label className="block text-sm font-medium">Email</label>
-                    <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        required
-                        className="w-full border p-2 rounded"
-                    />
-                </div>
-
-                <div className="mb-4">
-                    <label className="block text-sm font-medium">Password (Optional)</label>
-                    <input
-                        type="password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        placeholder="Leave empty to keep existing password"
-                        className="w-full border p-2 rounded"
-                    />
-                </div>
-
-                <div className="mb-4">
-                    <label className="block text-sm font-medium">Roles</label>
-                    <select
-                        name="roleIds"
-                        multiple
-                        value={formData.roleIds.length > 0 ? formData.roleIds : []} // ✅ Ensure roles are preselected
-                        onChange={(e) => handleMultiSelect(e, "roleIds")}
-                        required
-                        className="w-full border p-2 rounded"
-                    >
-                        {roles.map((role) => (
-                            <option key={role.id} value={role.id}>
-                                {role.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                <div className="mb-4">
-                    <label className="block text-sm font-medium">Org Roles</label>
-                    <select
-                        name="orgRoleIds"
-                        multiple
-                        value={formData.orgRoleIds}
-                        onChange={(e) => handleMultiSelect(e, "orgRoleIds")}
-                        className="w-full border p-2 rounded h-32"
-                    >
-                        {orgRoles.map((role) => (
-                        <option key={role.id} value={role.id}>
-                            {role.orgRoleDescription} {role.amountLimit ? `— Limit: ${role.amountLimit}` : ""}
-                        </option>
-                        ))}
-                    </select>
-                </div>
-
-                <div className="mb-4">
-                    <label className="block text-sm font-medium">Departments</label>
-                    <select
-                        name="departmentIds"
-                        multiple
-                        value={formData.departmentIds.length > 0 ? formData.departmentIds : []} // ✅ Ensure departments are preselected
-                        onChange={(e) => handleMultiSelect(e, "departmentIds")}
-                        required
-                        className="w-full border p-2 rounded"
-                    >
-                        {departments.map((dept) => (
-                            <option key={dept.id} value={dept.id}>
-                                {dept.name}
-                            </option>
-                        ))}
-                    </select>
-
-                </div>
-
-                <div className="flex justify-center">
-                    <button
-                        type="button"
-                        onClick={handleBack}
-                        className="bg-gray-500 text-white p-2 rounded hover:bg-gray-600"
-                    >
-                        Back
-                    </button>
-                    &nbsp;
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
-                    >
-                        {loading ? "Updating..." : "Update User"}
-                    </button>
-                </div>
-            </form>
-
-            {/* ✅ Confirmation Popup */}
-            {showPopup && (
-                <ConfirmationPopup
-                    message="User updated successfully!"
-                    onConfirm={() => navigate("/users")}
-                />
-            )}
+      {error && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          {error}
         </div>
-    );
+      )}
+
+      <SectionCard title="User Details">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InputField
+              icon={<FiUser />}
+              label="Full Name"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+            />
+
+            <InputField
+              icon={<FiUser />}
+              label="Username"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+            />
+
+            <InputField
+              icon={<FiMail />}
+              label="Email"
+              name="email"
+              type="email"
+              value={formData.email}
+              onChange={handleChange}
+            />
+          </div>
+
+          <SelectMulti
+            icon={<FiShield />}
+            label="Permission"
+            tooltip={fieldHelpMessages.userRole}
+            options={roles}
+            value={formData.roleIds}
+            field="roleIds"
+            onChange={handleMultiSelect}
+            labelKey="description"
+          />
+
+          <SelectMulti
+            icon={<FiUsers />}
+            label="Org Role"
+            tooltip={fieldHelpMessages.orgRole}
+            options={orgRoles}
+            value={formData.orgRoleIds}
+            field="orgRoleIds"
+            onChange={handleMultiSelect}
+            labelKey="orgRoleDescription"
+          />
+
+          <SelectMulti
+            icon={<FiBriefcase />}
+            label="Department"
+            tooltip={fieldHelpMessages.department}
+            options={departments}
+            value={formData.departmentIds}
+            field="departmentIds"
+            onChange={handleMultiSelect}
+            labelKey="name"
+          />
+
+          <div className="flex justify-center gap-3 pt-4">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <FiArrowLeft />
+              Back
+            </button>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              <FiSave />
+              {loading ? "Updating..." : "Update User"}
+            </button>
+          </div>
+        </form>
+      </SectionCard>
+
+      {showPopup && (
+        <ConfirmationPopup
+          message="User updated successfully!"
+          onConfirm={() => navigate("/users")}
+        />
+      )}
+    </div>
+  );
 };
+
+const InputField = ({ icon, label, name, value, onChange, type = "text" }) => (
+  <div>
+    <label className="text-sm font-semibold text-slate-700">{label}</label>
+    <div className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+      <span className="text-slate-400">{icon}</span>
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        required
+        className="w-full bg-transparent outline-none"
+      />
+    </div>
+  </div>
+);
+
+const SelectMulti = ({
+  icon,
+  label,
+  tooltip,
+  options,
+  value,
+  field,
+  onChange,
+  labelKey,
+}) => (
+  <div>
+    <label className="flex items-center gap-2 font-semibold text-slate-700">
+      {label}
+      <InfoTooltip message={tooltip} />
+    </label>
+
+    <div className="mt-1 flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-2">
+      <span className="mt-1 text-slate-400">{icon}</span>
+      <select
+        multiple
+        value={value}
+        onChange={(e) => onChange(e, field)}
+        className="h-32 w-full bg-transparent outline-none"
+      >
+        {options.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item[labelKey]}
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+);
 
 export default EditUser;

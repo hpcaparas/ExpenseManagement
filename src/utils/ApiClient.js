@@ -48,6 +48,7 @@ apiClient.interceptors.response.use(
         localStorage.setItem("refreshToken", newRefreshToken);
 
         originalRequest.headers["Authorization"] = `Bearer ${accessToken}`;
+
         return apiClient(originalRequest);
       } catch (refreshError) {
         console.error("Refresh token invalid or expired. Logging out.");
@@ -69,6 +70,7 @@ apiClient.interceptors.request.use((config) => {
     } else {
       console.warn("No access token found in localStorage");
     }
+
     return config;
   });
 
